@@ -1,11 +1,10 @@
 """Library for creating sequence-to-sequence models."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
+import tensorflow.python.platform
+import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.ops import rnn
-from tensorflow.python.ops import rnn_cell
+import rnn
+import rnn_cell
 
 def attention_decoder(decoder_inputs, initial_state, attention_states, cell,
                       output_size=None, num_heads=1, loop_function=None,
@@ -77,7 +76,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, cell,
     attention_vec_size = attn_size  # Size of query vectors for attention.
     for a in xrange(num_heads):
       k = tf.get_variable("AttnW_%d" % a, [1, 1, attn_size, attention_vec_size])
-      hidden_features.append(nn_ops.conv2d(hidden, k, [1, 1, 1, 1], "SAME"))
+      hidden_features.append(tf.nn.conv2d(hidden, k, [1, 1, 1, 1], "SAME"))
       v.append(tf.get_variable("AttnV_%d" % a, [attention_vec_size]))
 
     states = [initial_state]
@@ -92,7 +91,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, cell,
           # Attention mask is a softmax of v^T * tanh(...).
           s = tf.reduce_sum(
               v[a] * tf.tanh(hidden_features[a] + y), [2, 3])
-          a = tf.softmax(s)
+          a = tf.nn.softmax(s)
           # Now calculate the attention-weighted vector d.
           d = tf.reduce_sum(
               tf.reshape(a, [-1, attn_length, 1, 1]) * hidden,
@@ -192,15 +191,15 @@ def embedding_attention_decoder(decoder_inputs, initial_state, attention_states,
     proj_biases.get_shape().assert_is_compatible_with([num_symbols])
 
   with tf.variable_scope(scope or "embedding_attention_decoder"):
-    with ops.device("/cpu:0"):
+    with tf.device("/cpu:0"):
       embedding = tf.get_variable("embedding", [num_symbols, cell.input_size])
 
     def extract_argmax_and_embed(prev, _):
       """Loop_function that extracts the symbol from prev and embeds it."""
       if output_projection is not None:
-        prev = nn_ops.xw_plus_b(
+        prev = tf.xw_plus_b(
             prev, output_projection[0], output_projection[1])
-      prev_symbol = tf.stop_gradient(math_ops.argmax(prev, 1))
+      prev_symbol = tf.stop_gradient(tf.argmax(prev, 1))
       emb_prev = tf.embedding_lookup(embedding, prev_symbol)
       return emb_prev
 
@@ -337,7 +336,7 @@ def sequence_loss_by_example(logits, targets, weights, num_decoder_symbols,
         # SparseToDense does not accept batched inputs, we need to do this by
         # re-indexing and re-sizing. When TensorFlow adds SparseCrossEntropy,
         # rewrite this method.
-        indices = targets[i] + num_decoder_symbols * math_ops.range(batch_size)
+        indices = targets[i] + num_decoder_symbols * tf.range(batch_size)
         with tf.device("/cpu:0"):  # Sparse-to-dense must be on CPU for now.
           dense = tf.sparse_to_dense(
               indices, tf.expand_dims(length, 0), 1.0,
@@ -386,7 +385,7 @@ def sequence_loss(logits, targets, weights, num_decoder_symbols,
         softmax_loss_function=softmax_loss_function))
     if average_across_batch:
       batch_size = tf.shape(targets[0])[0]
-      return cost / tf.cast(batch_size, dtypes.float32)
+      return cost / tf.cast(batch_size, tf.float32)
     else:
       return cost
 
